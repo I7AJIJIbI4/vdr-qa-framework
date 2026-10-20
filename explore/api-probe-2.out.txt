@@ -1,0 +1,24 @@
+[P1] complete with no bytes uploaded -> 500 {"message":"Could not verify the upload","error":"Internal Server Error","statusCode":500}
+[P2] concurrent full uploads names ["Term Sheet.pdf","Term Sheet (1).pdf","Term Sheet (1).pdf","Term Sheet (1).pdf"]
+[P2b] listing names ["Term Sheet (1).pdf","Term Sheet (1).pdf","Term Sheet (1).pdf","Term Sheet.pdf"]
+[P3] sequential conflict names ["nda.pdf","NDA (1).PDF","nda (2).pdf"]
+[P4] rename onto existing name -> 200 "nda (2).pdf"
+[P4b] rename to own name different case -> 200 "NDA.pdf"
+[P5] folder dup-case create, rename-conflict, rename-self-case, 201 chars, whitespace [409,409,200,400,400]
+[P6] move -> status, move into conflict -> name [200,"NDA (1).pdf"]
+[P6b] move into other user's folder -> 404 
+[P7] delete preview for Legal (expect 1 folder, 2 files) {"folderCount":1,"fileCount":2,"totalSize":384}
+[P8] breadcrumbs owner vs viewer {"owner":{"dataRoomId":"490efe6c-345d-4ff1-9890-3da50fed7ec6","dataRoomName":"My Data Room","folders":[{"id":"94727426-2b26-44c7-9f59-a98a2dc4c7ea","name":"LEGAL"},{"id":"a21aa8cd-1e9e-499d-9b91-6ed1e02e2e78","name":"Contracts"}],"accessLevel":"OWNER"},"viewer":{"dataRoomId":"490efe6c-345d-4ff1-9890-3da50fed7ec6","dataRoomName":null,"folders":[{"id":"a21aa8cd-1e9e-499d-9b91-6ed1e02e2e78","name":"Contracts"}],"accessLevel":"VIEWER"}}
+[P8b] viewer reads parent of shared folder -> 404 
+[P9] viewer reads file in shared folder, then after owner moves it to root [200,404]
+[P10] viewer before revoke, after revoke, previously issued signed URL after revoke [200,404,200]
+[P10b] revoke twice (owner), revoke by non-owner [204,404]
+[P11] share pending file -> 201; viewer sees in received: {"names":["pending.pdf"],"openStatus":404}
+[P11b] rename pending (invisible) file -> 200 "nda (3).pdf"
+[P12] pagination pages=4, total=14, unique=14 ["F0","F1","F2","F3","F4","F5","F6","F7","F8","doc-0.pdf","doc-1.pdf","doc-2.pdf","doc-3.pdf","doc-4.pdf"]
+[P13] alg=none, forged payload, garbage [401,401,401]
+[P14] register dup email (upper), login upper-case email, 7-char pw, unknown user [409,200,400,401,"Invalid email or password"]
+[P15] share without email, bad email, type/id mismatch [400,400,404]
+[P15b] public link idempotent (same token twice?) true
+[P15c] public folder link -> nested subfolder contents 200 
+{"o":"qa-mvgpcxk9-o@example.com","v":"qa-mvgpcxk9-v@example.com"}

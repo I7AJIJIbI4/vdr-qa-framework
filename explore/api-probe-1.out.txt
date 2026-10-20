@@ -1,0 +1,26 @@
+[setup] owner room {"roomId":"c08200c8-94f8-4c5b-bb3c-56b43f56076f"}
+[H1] whitespace name register -> 201, stored name ""
+[H2] create data room "   " -> 201 {"id":"ec96a7a2-4592-443a-8ed6-2cc4823c193d","name":"","createdAt":"2026-10-20T13:10:18.580Z"}
+[H2b] owner rooms count 2
+[H3] concurrent same-name folder create statuses [201,409,409,409,409,409]
+[H3b] folders with that name in listing 1
+[H4] concurrent same-name intents -> names ["dup.pdf","dup.pdf","dup.pdf","dup.pdf","dup.pdf","dup.pdf"]
+[H5] intent with .exe name -> 201 "invoice.exe"
+[H6a] PUT html bytes to signed url {"status":200,"body":"{\"Key\":\"files/3e3f3b4c-426a-4a24-b843-f917276e51a9\"}"}
+[H6b] complete -> 201 {"id":"7029e1d5-9547-43c4-9b36-bffc3799fd80","name":"html-mvgpatpv.pdf","folderId":null}
+[H6c] file detail (size/mime as stored) {"id":"7029e1d5-9547-43c4-9b36-bffc3799fd80","name":"html-mvgpatpv.pdf","size":90,"mimeType":"application/pdf","folderId":null,"dataRoomId":"c08200c8-94f8-4c5b-bb3c-56b43f56076f"}
+[H6d] view-url serves content-type {"ct":"text/plain","status":200,"body":"<html><body><h1 id=\"x\">not a pdf</h1><script>document.title="}
+[H7a] PUT 51MB after declaring 1 byte {"status":400,"body":"{\"statusCode\":\"413\",\"error\":\"Payload too large\",\"message\":\"The object exceeded the maximum allowed size\",\"code\":\"EntityTooLarge\"}"}
+[H7b] complete -> 500 {"message":"Could not verify the upload","error":"Internal Server Error","statusCode":500}
+[H7c] stored size 
+[H8a] share to unregistered email -> 201 
+[H8b] freshly registered (unverified) user reads shared room -> 200, items 2
+[H9] owner shares room with own email -> 201 
+[H9b] owner "shared with me" entries 1
+[H10] cross-tenant statuses (expect all 404) [404,404,404,404,404,404,404,404]
+[H11] viewer: read/rename/create/delete/preview/room-root (expect 200,404,404,404,404,404) [200,404,404,404,404,404]
+[H12] public: summary, out-of-scope file, room root, after revoke summary, after revoke contents [200,404,404,410,410]
+[H13] 12 wrong logins statuses [401,401,401,401,401,401,401,401,401,401,401,401]
+[H14] rename to .exe -> 200 "renamed.exe"
+[H15] malformed id, cursor, limit=0, limit=101, bad token [400,400,400,400,404]
+[H16] delete shared folder -> 204; viewer reads -> 404; viewer received 0

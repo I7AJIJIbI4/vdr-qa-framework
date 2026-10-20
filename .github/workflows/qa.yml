@@ -1,0 +1,45 @@
+name: QA
+
+on:
+  pull_request:
+  schedule:
+    # Nightly full run. Every run registers new qa-auto-* accounts and there is no
+    # cleanup endpoint, so it is opt-in: set repo variable RUN_NIGHTLY=true.
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+jobs:
+  fast:
+    # unit + api: runs on every PR, ~2-3 min
+    if: github.event_name != 'schedule' || vars.RUN_NIGHTLY == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npx playwright test --project=unit --project=api
+        env:
+          API_URL: ${{ vars.API_URL }}
+          WEB_URL: ${{ vars.WEB_URL }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: report-fast, path: playwright-report }
+
+  e2e:
+    needs: fast
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npx playwright test --project=e2e
+        env:
+          API_URL: ${{ vars.API_URL }}
+          WEB_URL: ${{ vars.WEB_URL }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: report-e2e, path: playwright-report }
