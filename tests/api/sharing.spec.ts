@@ -49,26 +49,36 @@ test.describe('Sharing - per-user', () => {
   });
 
   test('BUG-01: a per-user share cannot be claimed by whoever registers that email first @security', async ({ owner, anon }) => {
-    knownBug('BUG-01', 'no email verification; shares to not-yet-registered emails go to the first registrant');
     const target = qaEmail('cfo');
     must(await owner.api.share({ resourceType: 'DATAROOM', resourceId: owner.roomId, mode: 'USER', granteeEmail: target }));
 
     // An attacker who guesses/knows the invited address simply signs up with it.
-    const { accessToken } = must(await anon.register({ name: 'Not the CFO', email: target, password: env.password }));
-    expect((await anon.as(accessToken).roomContents(owner.roomId)).status).toBe(404);
+    // A fix may refuse or defer the registration (e.g. email verification), so its status is not asserted.
+    const registered = await anon.register({ name: 'Not the CFO', email: target, password: env.password });
+    expect(registered.status, 'registration must not be a server error').toBeLessThan(500);
+    const token = registered.status === 201 ? registered.body.accessToken : undefined;
+    const access = token ? (await anon.as(token).roomContents(owner.roomId)).status : null;
+
+    knownBug('BUG-01', 'no email verification; shares to not-yet-registered emails go to the first registrant');
+    expect(access === null || access === 404, `unverified registrant got HTTP ${access} on the shared room`).toBe(true);
   });
 
   test('BUG-08: "shared with me" never lists items the recipient cannot open', async ({ owner, newActor }) => {
-    knownBug('BUG-08', 'shares on never-uploaded files (and self-shares) are listed');
     const viewer = await newActor('viewer');
     const pending = must(
       await owner.api.uploadIntent({ dataRoomId: owner.roomId, name: 'pending.pdf', size: 10, mimeType: 'application/pdf' }),
     );
-    must(await owner.api.share({ resourceType: 'FILE', resourceId: pending.fileId, mode: 'USER', granteeEmail: viewer.email }));
-
-    for (const item of must(await viewer.api.receivedShares()).items) {
-      expect((await viewer.api.getFile(item.resourceId)).status, item.resourceName).toBe(200);
+    // A fix may refuse to share a file that was never uploaded; that is fine.
+    const shared = await owner.api.share({ resourceType: 'FILE', resourceId: pending.fileId, mode: 'USER', granteeEmail: viewer.email });
+    expect(shared.status, 'share must not be a server error').toBeLessThan(500);
+    const received = must(await viewer.api.receivedShares()).items;
+    const unopenable: string[] = [];
+    for (const item of received) {
+      if ((await viewer.api.getFile(item.resourceId)).status !== 200) unopenable.push(item.resourceName);
     }
+
+    knownBug('BUG-08', 'shares on never-uploaded files are listed');
+    expect(unopenable).toEqual([]);
   });
 });
 

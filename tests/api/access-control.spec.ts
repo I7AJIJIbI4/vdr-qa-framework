@@ -53,7 +53,7 @@ const writes: Record<string, Op> = {
 const OK = [200, 201];
 // Unauthorized access is reported as 404 so existence never leaks; anonymous gets 401.
 const expected: Record<'owner' | 'viewer' | 'stranger' | 'anonymous', (op: string) => number[]> = {
-  owner: () => OK,
+  owner: () => [...OK, 204],
   viewer: (op) =>
     ['GET shared folder contents', 'GET nested folder contents', 'GET inside file', 'GET inside file view-url'].includes(op)
       ? OK
@@ -84,8 +84,9 @@ test.describe('Access control matrix @security', () => {
       const s = await seed(owner, viewer, await pdf());
       const api = { owner: owner.api, viewer: viewer.api, stranger: stranger.api, anonymous: anon }[actor];
 
-      // Writes last, and owner's destructive writes are skipped so reads stay meaningful.
-      const ops = { ...reads, ...(actor === 'owner' ? {} : writes) };
+      // Reads first, then writes. For the owner the writes run in an order where each one is still valid
+      // (rename before delete, move before delete), so every cell is expected to succeed.
+      const ops = { ...reads, ...writes };
       const failures: string[] = [];
       for (const [name, op] of Object.entries(ops)) {
         const { status } = await op(api, s);
@@ -93,9 +94,11 @@ test.describe('Access control matrix @security', () => {
       }
       expect(failures, failures.join('\n')).toEqual([]);
 
-      // Nothing a non-owner did may have changed the room.
-      const after = await owner.api.collectAll((q) => owner.api.folderContents(s.shared, q));
-      expect(after.map((i) => i.name).sort()).toEqual(['Nested', 'inside.pdf']);
+      if (actor !== 'owner') {
+        // Nothing a non-owner did may have changed the room.
+        const after = await owner.api.collectAll((q) => owner.api.folderContents(s.shared, q));
+        expect(after.map((i) => i.name).sort()).toEqual(['Nested', 'inside.pdf']);
+      }
     });
   }
 

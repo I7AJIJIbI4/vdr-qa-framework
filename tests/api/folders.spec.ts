@@ -88,7 +88,10 @@ test.describe('Folders', () => {
   });
 
   test('BUG-07: data room name cannot be whitespace only', async ({ owner }) => {
+    const { status } = await owner.api.createDataRoom('   ');
+    expect(status, 'must not be a server error').toBeLessThan(500);
+
     knownBug('BUG-07', 'POST /data-rooms trims after validation and stores ""');
-    expect((await owner.api.createDataRoom('   ')).status).toBe(400);
+    expect(status).toBe(400);
   });
 });

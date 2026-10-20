@@ -1,0 +1,3 @@
+# Output of api-probe-3-ghost-name.mjs, captured during the 2026-10-20 session (not re-run).
+[G1] second upload name: Q3 Report (1).pdf | visible listing: ["Q3 Report (1).pdf"]
+[G2] rename back to "Q3 Report.pdf" -> 200 Q3 Report (1).pdf

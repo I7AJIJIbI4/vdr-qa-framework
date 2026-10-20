@@ -1,0 +1,4 @@
+[BUG-05] declared size 1000, sent 2097152 bytes -> PUT 200, complete 201, stored size 2097152
+[BUG-13] after owner deleted gone.pdf: toast=["File not found"] | row still listed: true
+[BUG-14] invalid link page: "Data Room — shared view | Log in | Link not available | This link is invalid or no longer available. | Retry" | Retry buttons: 1
+(keep.pdf 201; account qa-mvgs79qg-xc@example.com)

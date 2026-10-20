@@ -49,15 +49,19 @@ test.describe('Auth', () => {
   });
 
   test('BUG-07: whitespace-only name is rejected', async ({ anon }) => {
-    knownBug('BUG-07', 'API trims the name after validation and stores an empty string');
     const res = await anon.register({ name: '   ', email: qaEmail('ws'), password: env.password });
+    expect(res.status, 'must not be a server error').toBeLessThan(500);
+
+    knownBug('BUG-07', 'API trims the name after validation and stores an empty string');
     expect(res.status).toBe(400);
   });
 
   test('BUG-04: repeated failed logins are throttled @security', async ({ anon, owner }) => {
-    knownBug('BUG-04', 'no rate limiting or lockout on /auth/login');
     const statuses: number[] = [];
     for (let i = 0; i < 15; i++) statuses.push((await anon.login({ email: owner.email, password: `bad-${i}` })).status);
+    expect(statuses.every((s) => s === 401 || s === 429), `unexpected statuses: ${statuses}`).toBe(true);
+
+    knownBug('BUG-04', 'no rate limiting or lockout on /auth/login');
     expect(statuses).toContain(429);
   });
 });

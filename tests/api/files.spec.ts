@@ -60,12 +60,12 @@ test.describe('Files', () => {
   });
 
   test('BUG-11: unknown body fields are rejected instead of silently ignored', async ({ owner, pdf }) => {
-    knownBug('BUG-11', 'whitelist without forbidNonWhitelisted: a mistyped move field moves the file to the room root with 200');
     const { api, roomId } = owner;
     const source = must(await api.createFolder({ name: 'Source', dataRoomId: roomId }));
     const target = must(await api.createFolder({ name: 'Target', dataRoomId: roomId }));
     const file = await api.uploadPdf(roomId, 'contract.pdf', await pdf(), source.id);
 
+    knownBug('BUG-11', 'a mistyped move field is dropped and the file moves to the room root with 200');
     // `folderId` is not part of MoveFileDto (the field is `targetFolderId`)
     const res = await api.raw<{ folderId: string | null }>('PATCH', `/files/${file.id}/move`, { folderId: target.id });
     const after = must(await api.getFile(file.id));
@@ -103,41 +103,50 @@ test.describe('Files', () => {
   });
 
   test('BUG-02: concurrent same-name uploads never produce duplicate names', async ({ owner, pdf }) => {
-    knownBug('BUG-02', 'resolveName is check-then-insert with no unique index; parallel uploads collide');
     const { api, roomId } = owner;
     const bytes = await pdf();
-    await Promise.all(Array.from({ length: 4 }, () => api.uploadPdf(roomId, 'Term Sheet.pdf', bytes)));
+    // A fix may legitimately reject the losers (e.g. 409), so failed uploads are fine here.
+    const results = await Promise.allSettled(Array.from({ length: 4 }, () => api.uploadPdf(roomId, 'Term Sheet.pdf', bytes)));
+    expect(results.some((r) => r.status === 'fulfilled'), 'at least one upload must succeed').toBe(true);
     const names = must(await api.roomContents(roomId)).items.map((i) => i.name);
+
+    knownBug('BUG-02', 'parallel same-name uploads all receive the same name');
     expect(findDuplicateNames(names)).toEqual([]);
   });
 
   test('BUG-03: an abandoned upload does not reserve the file name', async ({ owner, pdf }) => {
-    knownBug('BUG-03', 'pending (invisible) rows take part in conflict resolution forever');
     const { api, roomId } = owner;
     const bytes = await pdf();
     // first attempt dies after the intent (tab closed / network drop)
     must(await api.uploadIntent({ dataRoomId: roomId, name: 'Q3 Report.pdf', size: bytes.length, mimeType: 'application/pdf' }));
     const retry = await api.uploadPdf(roomId, 'Q3 Report.pdf', bytes);
+
+    knownBug('BUG-03', 'pending (invisible) rows take part in conflict resolution forever');
     expect(retry.name).toBe('Q3 Report.pdf');
   });
 
   test('BUG-05: stored content must actually be a PDF', async ({ owner }) => {
-    knownBug('BUG-05', 'server trusts client-declared MIME type; bytes and extension are never checked');
     const { api, roomId } = owner;
     const html = Buffer.from('<html><body>not a pdf</body></html>');
     const intent = must(await api.uploadIntent({ dataRoomId: roomId, name: 'invoice.exe', size: html.length, mimeType: 'application/pdf' }));
-    await api.putToStorage(intent.uploadUrl, html, 'text/html');
+    // The bytes must really reach storage, otherwise a "rejection" below would prove nothing.
+    expect(await api.putToStorage(intent.uploadUrl, html, 'text/html')).toBeLessThan(300);
     const complete = await api.completeUpload(intent.fileId);
-
     const stored = complete.status < 300 ? await api.fetchSigned(must(await api.viewUrl(intent.fileId)).url) : null;
-    expect(stored === null || isPdf(stored.body), 'non-PDF bytes were accepted and are served as a PDF').toBe(true);
+
+    knownBug('BUG-05', 'server trusts the client-declared MIME type; bytes and extension are never checked');
+    // Fixed = rejected with a 4xx, or whatever is served is a real PDF. A 5xx is not a fix.
+    if (stored === null) expect(complete.status, 'rejection must be a 4xx').toBeLessThan(500);
+    else expect(isPdf(stored.body), 'non-PDF bytes were accepted and are served as a PDF').toBe(true);
   });
 
   test('BUG-06: completing an upload whose bytes never arrived is a 4xx, not a 500', async ({ owner }) => {
-    knownBug('BUG-06', 'storage "object not found" is not recognised and surfaces as 500');
     const intent = must(
       await owner.api.uploadIntent({ dataRoomId: owner.roomId, name: 'never.pdf', size: 10, mimeType: 'application/pdf' }),
     );
-    expect((await owner.api.completeUpload(intent.fileId)).status).toBe(400);
+    const { status } = await owner.api.completeUpload(intent.fileId);
+
+    knownBug('BUG-06', 'storage "object not found" is not recognised and surfaces as 500');
+    expect(status >= 400 && status < 500, `got ${status}`).toBe(true);
   });
 });

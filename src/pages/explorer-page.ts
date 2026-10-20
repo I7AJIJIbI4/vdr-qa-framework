@@ -5,13 +5,11 @@ export class ExplorerPage {
   readonly main: Locator;
   readonly rows: Locator;
   readonly dialog: Locator;
-  readonly uploadPanel: Locator;
 
   constructor(private readonly page: Page) {
     this.main = page.locator('main');
     this.rows = page.locator('table tbody tr');
     this.dialog = page.getByRole('dialog');
-    this.uploadPanel = page.getByText(/uploads? (complete|in progress)|uploading/i).first();
   }
 
   row(name: string): Locator {

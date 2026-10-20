@@ -6,7 +6,7 @@
 
 The product is **well built for an MVP**: tenant isolation, viewer read-only enforcement, public-link scoping, revocation and error states all held up under a deliberately adversarial authorization matrix. However, it is **not ready to hold real deal documents**. One critical flaw (**BUG-01**) lets anyone get access to a room shared with a not-yet-registered email simply by registering that email first. Three high-severity issues affect file integrity (duplicate names, permanently "ghost-reserved" names) and login brute-force protection.
 
-**Release readiness: NO-GO for production / real data. GO for a demo** with seeded data, once BUG-01 is fixed or per-email sharing is restricted to existing accounts.
+**Release readiness: NO-GO for production / real data. Conditional GO for a demo** with seeded, non-confidential data and sharing limited to known test accounts.
 
 ---
 
@@ -25,14 +25,21 @@ The product is **well built for an MVP**: tenant isolation, viewer read-only enf
 
 ## 2. Key issues and risks
 
-Full details with reproduction steps are in [`FINDINGS.md`](FINDINGS.md): **14 bugs** (1 Critical, 3 High, 1 Medium, 9 Low) and **10 product issues** plus one environment note.
+Full details with reproduction steps are in [`FINDINGS.md`](FINDINGS.md): **14 bugs** (1 Critical, 3 High, 1 Medium, 9 Low), **10 product issues** and two environment notes.
 
 ### Must fix before real use
 | | Finding | Why it is first |
 |---|---|---|
 | **BUG-01** | Per-user share is claimable by registering the invited email (no email verification) | Direct confidential-data leak. The precondition (inviting an external advisor without an account) is the normal flow |
-| **PI-01** | Moving a file into a publicly-linked folder publishes it instantly, without a warning | Easiest *accidental* leak path |
 | **BUG-04** | No login throttling | Unlimited password guessing. 7-day tokens can't be revoked (PI-02) |
+
+### Needs a product decision before real use
+| | Finding | Why |
+|---|---|---|
+| **PI-01** | Moving a file into a publicly-linked folder publishes it instantly, without a warning | Intended inheritance model, so not a bug. But it is the easiest *accidental* leak path, so the owner should confirm the exposure change |
+| **PI-02** | Sign-out doesn't revoke the 7-day token | A deliberate MVP cut per the product README ("not for production"). Fine for a demo, required for production |
+
+PI-01 ranks above BUG-02/03 because accidental exposure of a document is worse than a naming problem with it.
 
 ### Should fix (trust in the room's contents)
 | | Finding |
@@ -43,13 +50,13 @@ Full details with reproduction steps are in [`FINDINGS.md`](FINDINGS.md): **14 b
 
 ### Risk themes
 1. **Identity is assumed, not verified.** Email is the sharing key, but nobody proves they own it (BUG-01, PI-06).
-2. **Uniqueness is enforced by "check, then insert"** with no database guarantee. It breaks under concurrency (BUG-02) and leaks invisible state (BUG-03). Folder creation held up (6 parallel creates gave one 201 and five 409s). Our hypothesis is that the `connection_limit=1` pooler setting from the product README serializes those requests; if so, it is likely to break when the pool is enlarged. Not verified.
+2. **Uniqueness is enforced by "check, then insert"**, with no database guarantee. The product's own docs describe the missing unique index as a deliberate choice. What we observed is the cost of that choice: it breaks under concurrency (BUG-02) and leaks invisible state (BUG-03). The two are linked. The name check counts unfinished uploads on purpose, so that files in one batch don't collide, and that is exactly what makes abandoned uploads hold names. A fix for one has to be checked against the other. Folder creation held up (6 parallel creates gave one 201 and five 409s). Our hypothesis is that the `connection_limit=1` pooler setting from the product README serializes those requests. If so, it is likely to break when the pool is enlarged. Not verified.
 3. **Client-side checks aren't mirrored server-side, and the API is lenient with bad input** (BUG-05, BUG-07, BUG-11: unknown fields are dropped silently instead of rejected).
 4. **Access is computed from location**, which is elegant, but moving items changes exposure without telling the user (PI-01).
 
 ## 3. Automated coverage
 
-**60 tests, all behaving as expected on the final run. Full run takes 3-6 minutes depending on backend latency.** Earlier, 3 E2E tests flaked under full-suite load because of the 10 s UI timeout and slow backend responses (ENV-02). The E2E timeout is now 20 s, the suite runs with 3 workers, and E2E runs after the API layer instead of alongside it. There are no retries locally (CI retries once).
+**60 tests, all behaving as expected on the final run. A full run takes 3-6 minutes, depending on backend latency.** Earlier, 3 E2E tests flaked under full-suite load because of the 10 s UI timeout and slow backend responses (ENV-02). Since then the E2E timeout is 20 s, the suite runs with 3 workers, and E2E runs after the API layer instead of alongside it. There are no retries locally (CI retries once).
 
 | Layer | Tests | Covers |
 |---|---|---|
@@ -57,7 +64,7 @@ Full details with reproduction steps are in [`FINDINGS.md`](FINDINGS.md): **14 b
 | API | 44 | Auth and JWT tampering · folder CRUD, conflicts, validation, recursive delete preview · file upload/view/download round-trip with byte comparison · sequential conflict naming · move rules · **authorization matrix (62 actor x operation checks)** · breadcrumb boundary · per-user share lifecycle · public-link scope, id substitution and 410 on revoke · keyset pagination integrity |
 | E2E | 6 | Owner organizes a room (folder, multi-upload with non-PDF rejection, rename keeps extension, delete with subtree warning) · deep links and not-found recovery · sign-out · public link viewed anonymously, then revoked live · invited viewer is read-only, then revoked live · BUG-02 in the UI |
 
-- **11 of the 60 tests are known-bug regressions** (`test.fail` + `BUG-xx` annotation). Each is checked to fail *on its intended assertion*, not on setup. When a fix ships, the test turns red with "expected to fail but passed", which is the signal to drop the marker.
+- **11 of the 60 tests are known-bug regressions** (`test.fail` + `BUG-xx` annotation). The marker is placed after all setup, and setup asserts that it got no server error. A broken environment therefore turns the test red; it can't count as the "expected" failure. The final assertion accepts any correct fix (for example, any 4xx instead of exactly 400). When a fix ships, the test turns red with "expected to fail but passed", which is the signal to drop the marker.
 - `@smoke` (9 tests, about 1 min) is the proposed release gate. `@security` runs the authorization and identity subset.
 - A CI workflow is included (`.github/workflows/qa.yml`): unit + API on every PR, E2E after them, and an opt-in nightly full run (`RUN_NIGHTLY=true`).
 
@@ -69,12 +76,15 @@ Full details with reproduction steps are in [`FINDINGS.md`](FINDINGS.md): **14 b
 |---|---|
 | No open Critical findings | ❌ BUG-01 |
 | No open High findings in P0 areas (authz, sharing, identity) | ❌ BUG-04 |
-| 100% of `@smoke` and `@security` tests pass (excluding known-bug markers) | ✅ |
+| Regression suite green: every non-known-bug test passes and every known-bug test fails as expected | ✅ |
+| No open Critical/High known-bug tests in `@security` (BUG-01, BUG-04 are still open) | ❌ |
 | Every High finding has a regression test | ✅ |
 
-**Verdict: NO-GO for production. Conditional GO for demo use.**
+A green suite means "nothing regressed". It does not mean "releasable": the second row is what blocks.
 
-Minimum to flip to GO: fix BUG-01 (verify email ownership, or allow per-email shares only to existing, verified accounts), add login throttling (BUG-04), and add a "this will make the file public" confirmation on move (PI-01). BUG-02 and BUG-03 should follow in the same release, because they erode trust in the room's contents.
+**Verdict: NO-GO for production. Conditional GO for demo use** (seeded, non-confidential data).
+
+Minimum to flip to GO for production: close BUG-01 and BUG-04, decide on PI-01 (a confirmation when a move changes exposure), and close PI-02 (server-side session revocation, which the product README already marks "not for production"). BUG-02 and BUG-03 should follow in the same release, because they erode trust in the room's contents. They have to be fixed together, see risk theme 2.
 
 ## 5. What to test or automate next
 
@@ -106,6 +116,7 @@ I used Claude Code throughout. It worked well where speed mattered and needed a 
 | **Probe and test scaffolding** | Drafted the probe scripts, the typed API client, fixtures and page objects | Ran everything against prod. Fixed selector ambiguities found on first run. Inspected **why** each known-bug test fails, to rule out false "expected failures" |
 | **Test design** | Proposed the authorization-matrix structure and boundary sets | Pruned it to what is risk-relevant |
 | **Writing** | Drafted the plan, findings and report | Removed claims that weren't backed by evidence. One example: an early draft claimed that renaming a duplicate "doesn't help", which was never tested, so it was cut |
-| **Independent cross-check** | A second AI session tested the same product in parallel without seeing this work (API probes + a real browser), then reviewed this suite | It converged on the same top findings (BUG-01, BUG-02, BUG-04, BUG-05, PI-05), which raises confidence in them. It added BUG-11 to BUG-14, PI-10 and ENV-01, and caught two inconsistencies: a smoke test title claiming "immediate" revoke despite PI-05, and a nightly CI job that would register accounts on someone else's production every night |
+| **Second session (same model)** | A second Claude session tested the same product in parallel without seeing this work (API probes + a real browser), then reviewed this suite | It reached the same top findings (BUG-01, BUG-02, BUG-04, BUG-05, PI-05). Both sessions were the same model, so this is consistency, not independent confirmation. It added BUG-11 to BUG-14, PI-10 and ENV-01. BUG-11 to BUG-14 and PI-10 were then re-checked here with recorded evidence. ENV-01 is reported as that session observed it. It also caught two inconsistencies: a smoke test title that claimed "immediate" revoke despite PI-05, and a nightly CI job that would have registered accounts on someone else's production every night |
+| **Post-submission review** | A code review of the suite and a five-perspective critique of the documents | Found that known-bug markers sat before setup (so an environment failure could pass as "expected") and that the release gate showed ✅ with a Critical open. Both were fixed; see the README errata |
 
-The main risk with AI here is plausible-but-unverified claims. The guardrail was simple: no finding goes in without a reproduction, and no test goes in without seeing it fail for the stated reason.
+The main risk with AI here is plausible but unverified claims. The guardrail was simple: no finding goes in without a recorded reproduction, and no test goes in without seeing it fail for the stated reason. The post-submission review showed where that guardrail had slipped: one size claim and three UI bugs had no saved evidence. They were re-checked and evidence was added.

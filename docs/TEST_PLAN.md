@@ -34,7 +34,7 @@ A data room fails its users in two ways: **someone sees a document they shouldn'
 2. **Exploratory API probing.** Scripted probes (`explore/api-probe-*.mjs`) confirm or refute each hypothesis against the live API. Refuted hypotheses are recorded too: they become regression tests.
 3. **Exploratory UI sessions.** Scripted walk-throughs (`explore/ui-explore.mjs`) plus manual checks in real Chrome cover owner, viewer, anonymous and mobile viewports, with screenshots as evidence.
 4. **Automate what was learned**, following the pyramid (section 5).
-5. **Report.** Findings are prioritized as Severity x Likelihood. Each confirmed bug has a reproducing automated test.
+5. **Report.** Findings are prioritized as Severity x Likelihood. Each automatable bug has a reproducing automated test. Each UI-only bug has a screenshot or a saved probe output.
 
 ## 4. Test design techniques
 
@@ -52,15 +52,17 @@ A data room fails its users in two ways: **someone sees a document they shouldn'
 | Layer | What | Count | Runtime | Runs on |
 |---|---|---|---|---|
 | **Unit** | Framework oracles and data builders (naming oracle, PDF builder, id generators) | 10 | < 1 s | every commit |
-| **API** | Contracts, validation, authorization matrix, sharing lifecycle, known-bug regressions | 43 | ~2 min | every PR |
-| **E2E (UI)** | 6 critical journeys: owner organizes a room, deep links, sign-out, public link + revoke, invited viewer read-only, duplicate-drop bug | 6 | ~35 s | PR + opt-in nightly |
+| **API** | Contracts, validation, authorization matrix, sharing lifecycle, known-bug regressions | 44 | 2-4 min | every PR |
+| **E2E (UI)** | 6 critical journeys: owner organizes a room, deep links, sign-out, public link + revoke, invited viewer read-only, duplicate-drop bug | 6 | 1-2 min | PR + opt-in nightly |
+
+Runtimes depend on the shared deployment's latency (ENV-02). A full run takes 3-6 min.
 
 Most of the weight sits on the API layer. All authorization logic lives server-side, so the API is the cheapest place to assert it exhaustively, and a UI test there would only re-test the same rule through a slower, flakier path. E2E covers what only a browser can show: wiring, client-side validation, navigation and read-only rendering.
 
 **Rules the framework enforces:**
 - Every test creates its **own users** and seeds through the API. There is no shared state and no ordering, so tests are parallel-safe.
 - Teardown empties the test's rooms. Accounts carry a `qa-auto-` prefix for out-of-band purging, since the API has no user delete.
-- **Known bugs stay in the suite** as `test.fail()` with a `BUG-xx` annotation. The suite stays green, and when a fix ships the test reports "expected to fail but passed", prompting removal of the marker.
+- **Known bugs stay in the suite** as `test.fail()` with a `BUG-xx` annotation. The marker goes **after** setup, and setup asserts "no 5xx", so only the bug itself can produce the expected failure. The suite stays green, and when a fix ships the test reports "expected to fail but passed", prompting removal of the marker.
 - Tags: `@smoke` (release gate, 9 tests) and `@security` (authorization and identity).
 
 ## 6. Entry / exit criteria
@@ -69,7 +71,8 @@ Most of the weight sits on the API layer. All authorization logic lives server-s
 
 **Exit (release readiness):**
 - No open **Critical** findings and no open **P0-area** (R1-R3) High findings.
-- 100% of `@smoke` and `@security` tests pass.
+- Regression suite green: every non-known-bug test passes, and every known-bug test fails as expected.
+- No `@security` test is still marked as a known bug. A green suite alone does not mean releasable.
 - Every High finding has an automated regression test.
 
 ## 7. Deliverables

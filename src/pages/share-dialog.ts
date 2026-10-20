@@ -15,9 +15,10 @@ export class ShareDialog {
   /** Creates the public link if needed and returns its URL. */
   async ensurePublicLink(): Promise<string> {
     const linkInput = this.root.locator('input[readonly]');
-    if (!(await linkInput.isVisible())) {
-      await this.root.getByRole('button', { name: 'Create public link' }).click();
-    }
+    const createButton = this.root.getByRole('button', { name: 'Create public link' });
+    // Wait until the dialog has decided which of the two states it is in.
+    await expect(linkInput.or(createButton)).toBeVisible();
+    if (await createButton.isVisible()) await createButton.click();
     await expect(linkInput).toBeVisible();
     return linkInput.inputValue();
   }
@@ -34,8 +35,9 @@ export class ShareDialog {
   }
 
   async revokePerson(email: string) {
-    await this.root.locator('li', { hasText: email }).getByRole('button', { name: 'Revoke' }).click();
-    await expect(this.root.getByText(email, { exact: true })).toBeHidden();
+    const stored = email.toLowerCase();
+    await this.root.locator('li', { hasText: stored }).getByRole('button', { name: 'Revoke' }).click();
+    await expect(this.root.getByText(stored, { exact: true })).toBeHidden();
   }
 
   async close() {

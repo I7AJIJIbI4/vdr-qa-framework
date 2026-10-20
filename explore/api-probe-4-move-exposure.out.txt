@@ -1,0 +1,2 @@
+# Output of api-probe-4-move-exposure.mjs, captured during the 2026-10-20 session (not re-run).
+[PI-01] public listing before move: [] after move: ["CONFIDENTIAL valuation.pdf"] anonymous view-url: 200

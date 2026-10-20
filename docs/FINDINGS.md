@@ -1,6 +1,6 @@
 # Findings Report - Virtual Data Room MVP
 
-Tested against the public deployment on 2026-10-20. Every bug below was reproduced at least twice. Where it is automatable it has a test that fails on the bug (marked `test.fail`, see the *Test* line); UI-only issues carry screenshot or step evidence instead. BUG-11 to BUG-14 came from a second, independent session (API probes + browser) and were cross-checked against this suite.
+Tested against the public deployment on 2026-10-20. Every bug below has recorded evidence. Automatable bugs have a test that fails on the bug (marked `test.fail`, see the *Test* line). UI-only bugs have a screenshot or a saved probe output (*Evidence* line). BUG-11 to BUG-14 were first reported by a second session (same model, working in parallel). Each was then re-checked here: BUG-11 by its test, BUG-12 by a screenshot, and BUG-13/14 by `explore/probe-5-crosscheck.mjs`.
 
 **Severity** = impact if it happens. **Priority** = fix order, weighing severity against how easily real users hit it.
 
@@ -45,6 +45,8 @@ Product issues and gaps (not defects against the spec, but risks for the stated 
 
 **Actual:** The new account immediately gets read access to the whole shared room (API `GET /data-rooms/:id/contents` returns 200 with the room's items).
 
+**Note:** Applying a share to an email before the account exists is documented, intended behaviour (`POST /shares` API docs). It is filed as a Critical bug anyway: without email verification, that design hands the share to an unverified person.
+
 **Impact:** Confidential deal documents are exposed to whoever registers the invited address first. External advisors (lawyers, auditors, bidders) are exactly the people who won't have an account yet, so the precondition is the normal case for a data room. The attacker only needs to know or guess the invitee's email.
 
 ---
@@ -73,7 +75,7 @@ Product issues and gaps (not defects against the spec, but risks for the stated 
 
 | Severity | Priority | Area | Test |
 |---|---|---|---|
-| High | P1 | Files | `tests/api/files.spec.ts` - *BUG-03* |
+| High | P1 | Files | `tests/api/files.spec.ts` - *BUG-03*; rename half: `explore/api-probe-3-ghost-name.out.txt` |
 
 **Steps**
 1. Start uploading `Q3 Report.pdf` and interrupt it after it starts (close the tab, lose network, or hit a storage error).
@@ -81,7 +83,7 @@ Product issues and gaps (not defects against the spec, but risks for the stated 
 3. Upload `Q3 Report.pdf` again, successfully.
 4. Try renaming it to `Q3 Report.pdf`.
 
-**Expected:** The file is stored as `Q3 Report.pdf`.
+**Expected:** The file is stored as `Q3 Report.pdf`. The product README describes abandoned uploads as "invisible to users", but they aren't: they hold the name.
 
 **Actual:** It is stored as `Q3 Report (1).pdf`, although no other file with that name is visible. Renaming back to `Q3 Report.pdf` "succeeds" but silently re-applies `(1)`. The clean name can never be used again in that folder.
 
@@ -111,7 +113,7 @@ Product issues and gaps (not defects against the spec, but risks for the stated 
 
 | Severity | Priority | Area | Test |
 |---|---|---|---|
-| Medium | P2 | Files | `tests/api/files.spec.ts` - *BUG-05* |
+| Medium | P2 | Files | `tests/api/files.spec.ts` - *BUG-05*; declared size: `explore/probe-5-crosscheck.out.txt` |
 
 **Steps (API):**
 1. `POST /files/upload-intent` with `name: "invoice.exe"`, `mimeType: "application/pdf"`.
@@ -120,7 +122,7 @@ Product issues and gaps (not defects against the spec, but risks for the stated 
 
 **Expected:** Only PDFs can be stored (the product's stated scope). The extension and content are validated server-side.
 
-**Actual:** All accepted. The declared size is not enforced either (intent with `size: 1000`, 2 MB PUT, accepted and stored as 2 MB). The file is recorded as `application/pdf` and listed as `invoice.exe`. Downloads keep the `.exe` name. The PDF check exists only in the browser.
+**Actual:** All accepted. The declared size is not enforced either: an intent declaring `size: 1000`, followed by a 2 MB PUT, completed with 201 and was stored as 2 097 152 bytes. The file is recorded as `application/pdf` and listed as `invoice.exe`. Downloads keep the `.exe` name. The PDF check exists only in the browser.
 
 **Impact:** A data room can distribute arbitrary files under a trusted-looking public link. Owners who script uploads can also store wrong content by mistake. *Not* an XSS: storage serves HTML as `text/plain` (verified).
 
@@ -214,9 +216,9 @@ Product issues and gaps (not defects against the spec, but risks for the stated 
 
 **Expected:** `400` for an unknown property, file stays in `Source`.
 
-**Actual:** `200`, and the file is moved to the **room root**. The global `ValidationPipe` uses `whitelist: true` without `forbidNonWhitelisted`, so the unknown field is stripped and the now-empty body means "move to root".
+**Actual:** `200`, and the file is moved to the **room root**.
 
-**Impact:** Any client or integration with a typo in a field name gets success responses while data changes in an unintended way. For move this also changes who can see the file (see PI-01). Fix: `forbidNonWhitelisted: true`.
+**Impact:** Any client or integration with a typo in a field name gets success responses while data changes in an unintended way. For move this also changes who can see the file (see PI-01).
 
 ---
 
@@ -225,7 +227,7 @@ Product issues and gaps (not defects against the spec, but risks for the stated 
 
 | Severity | Priority | Area | Evidence |
 |---|---|---|---|
-| Low | P3 | UI / i18n | Manual, browser with `ru`/`uk` locale |
+| Low | P3 | UI / i18n | `docs/evidence/06-double-upload.png` (browser with `ru` locale) |
 
 **Actual:** The "Modified" column shows `20 окт. 2026 г.` next to English labels. The product rule is "English-only UI". The E2E project pins `locale: 'en-US'`, which is why the suite does not see it.
 
@@ -238,7 +240,7 @@ Product issues and gaps (not defects against the spec, but risks for the stated 
 
 | Severity | Priority | Area | Evidence |
 |---|---|---|---|
-| Low | P3 | Sharing / UI | Manual |
+| Low | P3 | Sharing / UI | `explore/probe-5-crosscheck.out.txt`, `docs/evidence/bug-13-deleted-file-still-listed.png` |
 
 **Steps:** Open a public folder link. In another session the owner deletes one of its files. Click **Download** on that row.
 
@@ -253,7 +255,7 @@ Product issues and gaps (not defects against the spec, but risks for the stated 
 
 | Severity | Priority | Area | Evidence |
 |---|---|---|---|
-| Low | P3 | Sharing / UI | `/share/<garbage-token>` |
+| Low | P3 | Sharing / UI | `/share/<garbage-token>`: `explore/probe-5-crosscheck.out.txt`, `docs/evidence/bug-14-invalid-link-retry.png` |
 
 **Actual:** "Link not available - This link is invalid or no longer available." with a **Retry** button. A 404 token will never resolve on retry.
 
@@ -267,8 +269,8 @@ These aren't violations of `task.md`, but each is a real risk for "a repository 
 
 | ID | Issue | Why it matters | Rec. priority |
 |---|---|---|---|
-| PI-01 | **Moving a file silently changes who can see it.** Moving a document *into* a publicly-linked folder exposes it to the internet at once (verified: `explore/api-probe-4-move-exposure.mjs`, anonymous view returns 200 right after the move), and moving it *out* silently revokes viewers. There is no warning in the Move dialog. | Easiest accidental leak path in the product | P1 |
-| PI-02 | **Sign-out does not end the session server-side.** A token copied before sign-out keeps working for 7 days (verified: `GET /auth/me` returns 200 after sign-out). Documented as an MVP cut. | Stolen or shared-device tokens can't be killed | P1 for production |
+| PI-01 | **Moving a file silently changes who can see it.** This is the intended inheritance model (access follows location), not a defect. But moving a document *into* a publicly-linked folder exposes it to the internet at once (verified: `explore/api-probe-4-move-exposure.out.txt`, anonymous view returns 200 right after the move), and moving it *out* silently revokes viewers. There is no warning in the Move dialog. | Easiest accidental leak path in the product. Needs a product decision (e.g. a confirmation step), not a different model | P1 |
+| PI-02 | **Sign-out does not end the session server-side.** A token copied before sign-out keeps working for 7 days (verified: `GET /auth/me` returns 200 after sign-out). The product README lists it as a deliberate MVP cut, "not for production". | Stolen or shared-device tokens can't be killed. Accepted for a demo; required before production | P1 for production |
 | PI-03 | **No room-wide view of who has access.** Shares are visible only per item, in each item's Share dialog. | The owner can't audit exposure before or after a deal | P2 |
 | PI-04 | **"Shared with me" doesn't show who shared an item**, and every room is named "My Data Room" with no way to rename it. A recipient sees several identical "My Data Room" entries (`docs/evidence/12-viewer-shared-with-me.png`). | Confusing as soon as two counterparties share | P2 |
 | PI-05 | **Revocation is not instant for open documents.** Signed file URLs stay valid up to 5 minutes after revoke (verified). Documented trade-off. | Acceptable, but should be stated in the UI | P3 |
@@ -278,7 +280,7 @@ These aren't violations of `task.md`, but each is a real risk for "a repository 
 | PI-09 | **No CSP / X-Frame-Options** on the web app (HSTS is present). | The app can be framed (clickjacking) | P3 |
 | PI-10 | **No return to the requested page after sign-in.** A recipient who opens a deep link while signed out (e.g. from an invite) lands on their own room, not on the shared item. Verified in the UI: signed out, opened `/shared-with-me`, signed in, landed on `/` (`explore/ui-session-checks.mjs`). | Extra friction exactly on the invite path | P3 |
 | ENV-01 | **Shared demo accounts hold third-party data.** The `john@example.com` room is used by every candidate and contains uploads that look like real CVs with personal names. | PII on a public demo env; also makes manual testing on demo accounts noisy. This suite avoids it by using its own accounts | Info |
-| ENV-02 | **Slow, partly serialized API under light load.** Measured in the afternoon of 2026-10-20: about 1 s per authenticated call that touches the database (`/health` takes 0.2 s). 10 parallel identical reads take 3.5 s wall time, so requests queue. Earlier in the day the same suite ran about 2x faster. With 8 parallel test workers, `POST /auth/register` intermittently returned `500 Internal server error`. | A handful of concurrent users will feel multi-second waits. The first E2E runs used a 10 s UI timeout and flaked under the suite's own load, so the E2E timeout was raised to 20 s | P2 (performance) |
+| ENV-02 | **Observation, not a load test: the API is slow and partly serializes requests.** Measured in the afternoon of 2026-10-20: about 1 s per authenticated call that touches the database (`/health` takes 0.2 s). 10 parallel identical reads take 3.5 s wall time, so requests queue. This is consistent with the `connection_limit=1` pooler setting the product README requires. The same suite ran about 2x faster earlier in the day. With this suite's own 8 parallel workers, `POST /auth/register` intermittently returned `500`. That load was generated by the suite itself, and load testing is out of scope (test plan §2), so this is not a performance verdict. | Worth a real load test on staging before launch. For this suite it meant 3 workers, E2E after API, and a 20 s UI timeout | Info |
 
 ## 3. Verified working (regression-protected)
 
@@ -289,7 +291,7 @@ These hypotheses were tested and found **correct**. They are in the suite so the
 - **Inheritance:** a folder share covers nested folders and files. Breadcrumbs for a viewer stop at the share boundary (no ancestor or room names leak).
 - **Public links:** token scope is enforced against id substitution (files or room root outside the subtree give 404). A revoked link gives 410 with a clear UI message. A recreated link gets a new token. Tokens are 32 chars of base64url.
 - **JWT:** missing, garbage, forged-payload and `alg:none` tokens are rejected.
-- **Login** does not reveal whether an account exists.
+- **Login** does not reveal whether an account exists. Registration does (`409 "An account with this email already exists"`), so an email's account status is still discoverable. That matters together with BUG-01.
 - **Folder names:** case-insensitive uniqueness. Rename conflicts give 409. Trimming and length limits work.
 - **Sequential** file name conflicts (upload, rename, move) produce correct `name (n).ext` suffixes.
 - **Recursive delete** with an accurate preview (folder count, file count, total size). A viewer inside a deleted folder gets a clean "Folder not found" with a way back.

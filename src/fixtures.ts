@@ -99,6 +99,9 @@ async function emptyRoom(actor: Actor): Promise<void> {
  * Marks a test as documenting a known, still-open defect. The test asserts
  * the CORRECT behaviour and is expected to fail; once the bug is fixed
  * Playwright reports "expected to fail, but passed", prompting removal.
+ *
+ * Call it only AFTER all setup: from this point any failure counts as the
+ * expected one, so setup that runs earlier must fail the test for real.
  */
 export function knownBug(id: string, summary: string) {
   test.info().annotations.push({ type: 'known-bug', description: `${id}: ${summary}` });

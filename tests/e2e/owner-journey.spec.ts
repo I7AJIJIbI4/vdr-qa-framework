@@ -64,7 +64,6 @@ test.describe('Owner journey', () => {
   });
 
   test('BUG-02: dropping the same file twice never shows two identical names', async ({ page, owner, pdf }) => {
-    knownBug('BUG-02', 'two quick uploads of the same name both land as "NDA.pdf"');
     await new LoginPage(page).loginAs(owner);
     const explorer = new ExplorerPage(page);
     const file = { name: 'NDA.pdf', mimeType: 'application/pdf', buffer: await pdf('NDA') };
@@ -73,6 +72,8 @@ test.describe('Owner journey', () => {
     await expect(page.getByText('Uploads complete')).toBeVisible({ timeout: 30_000 });
     await page.reload();
     await expect.poll(() => explorer.rowNames()).toHaveLength(2);
+
+    knownBug('BUG-02', 'two quick uploads of the same name both land as "NDA.pdf"');
     expect(await explorer.rowNames()).toEqual(['NDA (1).pdf', 'NDA.pdf']);
   });
 });

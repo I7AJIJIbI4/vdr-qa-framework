@@ -16,15 +16,20 @@ test.describe('Sharing journeys', () => {
     const link = await dialog.ensurePublicLink();
     expect(link).toMatch(/\/share\/[\w-]{20,}$/);
 
-    const visitor = await (await browser.newContext()).newPage();
-    await visitor.goto(link);
-    await expect(visitor.getByText('Teaser.pdf')).toBeVisible();
-    await expect(visitor.getByRole('button', { name: /upload|new folder|rename|delete|share/i })).toHaveCount(0);
+    // A separate, logged-out browser context for the anonymous visitor (same locale as the project).
+    const visitorContext = await browser.newContext({ locale: 'en-US' });
+    try {
+      const visitor = await visitorContext.newPage();
+      await visitor.goto(link);
+      await expect(visitor.getByText('Teaser.pdf')).toBeVisible();
+      await expect(visitor.getByRole('button', { name: /upload|new folder|rename|delete|share/i })).toHaveCount(0);
 
-    await dialog.revokePublicLink();
-    await visitor.reload();
-    await expect(visitor.getByText('This link has been revoked').first()).toBeVisible();
-    await visitor.context().close();
+      await dialog.revokePublicLink();
+      await visitor.reload();
+      await expect(visitor.getByText('This link has been revoked').first()).toBeVisible();
+    } finally {
+      await visitorContext.close();
+    }
   });
 
   test('invited viewer finds the folder under "Shared with me" and cannot edit @smoke', async ({ page, owner, newActor, pdf }) => {
@@ -39,8 +44,14 @@ test.describe('Sharing journeys', () => {
 
     const explorer = new ExplorerPage(page);
     await expect(explorer.row('Cap Table.pdf')).toBeVisible();
-    await expect(page.getByRole('button', { name: /^(upload|new folder|share)$/i })).toHaveCount(0);
-    // breadcrumb must not reveal the owner's room
+    await expect(page.getByRole('button', { name: /upload|new folder|share/i })).toHaveCount(0);
+    // the row menu offers read-only actions only
+    await explorer.row('Cap Table.pdf').getByRole('button').last().click();
+    await expect(page.getByRole('menuitem', { name: 'Download' })).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: /rename|move|share|delete/i })).toHaveCount(0);
+    await page.keyboard.press('Escape');
+    // breadcrumb is shown, but must not reveal the owner's room
+    await expect(explorer.breadcrumb()).toContainText('Due Diligence');
     await expect(explorer.breadcrumb()).not.toContainText('My Data Room');
 
     // owner revokes while the viewer is on the page

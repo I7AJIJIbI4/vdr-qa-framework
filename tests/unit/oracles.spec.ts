@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 import { expectedConflictName, findDuplicateNames } from '../../src/data/conflict-name';
 import { isPdf, makePdf } from '../../src/data/pdf';
 import { qaEmail, uniqueId } from '../../src/data/names';
+import { env } from '../../src/config';
 
 // The API/E2E layers trust these helpers as oracles, so they get their own fast checks.
 
@@ -36,5 +37,6 @@ test('makePdf produces a parseable PDF', async () => {
 test('generated identities are unique and recognizable', () => {
   const ids = new Set(Array.from({ length: 200 }, uniqueId));
   expect(ids.size).toBe(200);
-  expect(qaEmail('owner')).toMatch(/^qa-auto-[a-z0-9]+-owner@example\.com$/);
+  const prefix = env.emailPrefix.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  expect(qaEmail('owner')).toMatch(new RegExp(`^${prefix}-[a-z0-9]+-owner@example\\.com$`));
 });
